@@ -28,8 +28,10 @@ from issuepilot.config import settings
 
 logger = logging.getLogger(__name__)
 
+#: GitHub issue URLs, optionally with a trailing fragment or query string.
 _ISSUE_URL_RE = re.compile(
-    r"^https?://(?P<host>[\w.-]+)/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)/issues/(?P<number>\d+)/?$"
+    r"^https?://(?:www\.)?github\.com/(?P<owner>[\w.-]+)/(?P<repo>[\w.-]+)/issues/(?P<number>\d+)"
+    r"(?:[/?#].*)?$"
 )
 
 
