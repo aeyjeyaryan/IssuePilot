@@ -100,3 +100,32 @@ def test_the_run_snapshot_is_available(client: TestClient) -> None:
     assert payload["finished"] is True
     assert payload["outcome"] == "fixed"
     assert payload["state"]["patch"]
+
+
+def test_a_late_subscriber_receives_the_events_of_a_finished_run(client: TestClient) -> None:
+    """A run that finished before the browser connected is still replayed."""
+    created = client.post(
+        "/api/runs",
+        json={"issue_url": "", "demo": True, "demo_repo": "repo1", "dry_run": True, "backend": "reference"},
+    ).json()
+    run_id = created["run_id"]
+
+    deadline = time.time() + 60
+    while time.time() < deadline:
+        if client.get(f"/api/runs/{run_id}").json().get("finished"):
+            break
+        time.sleep(0.2)
+
+    events = []
+    with client.stream("GET", f"/api/runs/{run_id}/events") as response:
+        assert response.status_code == 200
+        for line in response.iter_lines():
+            if line.startswith("data:"):
+                events.append(json.loads(line[5:].strip()))
+            if len(events) > 40:
+                break
+            time.sleep(0.02)
+
+    kinds = {event["kind"] for event in events}
+    assert "log" in kinds
+    assert "step_start" in kinds

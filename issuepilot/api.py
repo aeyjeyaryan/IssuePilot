@@ -169,9 +169,17 @@ async def stream_events(run_id: str) -> Any:
         raise HTTPException(status_code=404, detail=f"Unknown run '{run_id}'")
 
     queue = record.bus.subscribe()
+    # Events emitted before the client connected are replayed, otherwise a fast
+    # run (the offline demo takes about a second) would be invisible.
+    backlog = record.bus.history()
 
     async def generator():
         try:
+            for event in backlog:
+                if event.kind == "done":
+                    continue
+                payload = json.dumps(event.to_dict(), default=str)
+                yield f"event: {event.kind}\ndata: {payload}\n\n"
             while True:
                 event = await queue.get()
                 if event.kind == "done":

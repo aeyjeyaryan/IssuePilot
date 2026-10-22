@@ -144,6 +144,15 @@ def doctor() -> None:
     client = LLMClient()
     ollama_ok = client.available()
     console.print(f"- LLM backend: [bold]{client.describe()}[/bold] {'[green]ok[/green]' if ollama_ok else '[red]unavailable[/red]'}")
+    if ollama_ok and "ollama" in client.describe():
+        model = settings.ollama_model
+        console.print(f"  [dim]model: {model}[/dim]")
+        small = model.split(":")[0] in {"gemma3", "gemma2", "llama3.2", "phi3", "tinyllama", "qwen2.5"}
+        if small:
+            console.print(
+                "  [yellow]Small models can reproduce the bug but often fail to fix it. "
+                "A code capable model (qwen2.5-coder, codellama, ...) is recommended.[/yellow]"
+            )
 
     from issuepilot.github_ops import gh_available
 
