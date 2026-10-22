@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from typing import Sequence
+from typing import Sequence, Tuple
 
 from issuepilot.retrieval import RetrievedChunk
 
@@ -19,28 +19,47 @@ Rules:
 """
 
 PATCH_SYSTEM_PROMPT = """You are a senior Python engineer fixing a bug in an open source project.
-You will be given the issue, the failing test and the relevant source code.
+You are given the issue, the failing test and the exact content of the source files.
 
 Rules:
 - Fix the ROOT CAUSE, not the symptom.
 - Do NOT modify the test file, and do not weaken or delete any test.
 - Do NOT add new dependencies.
-- Output ONLY a unified diff (git format) that can be applied with `git apply -p1`.
-- Every changed file must be referenced with `diff --git a/<path> b/<path>`,
-  `--- a/<path>` and `+++ b/<path>` headers, followed by `@@` hunks.
-- Use paths relative to the repository root.
-- Wrap the diff in a single ```diff fenced code block.
+- Answer with JSON only, in one of these two shapes:
+
+  {"edits": [{"file": "relative/path.py", "old": "<exact snippet from the file>", "new": "<replacement>"}]}
+
+  {"edits": [{"file": "relative/path.py", "function": "<name>", "new": "<full corrected function>"}]}
+
+- Use the snippet form when a few lines change: `old` must be copied character
+  for character from the file content below, including indentation, and must
+  appear only once.  Keep `old` between 1 and 10 lines.
+- Use the function form when the logic of a function has to be rewritten; `new`
+  is then the complete new `def` block, correctly indented.
+- `new` must be DIFFERENT from `old`: never repeat the buggy code.
+- One edit per change. Do not rewrite whole files.
+- Wrap the JSON in a single ```json fenced code block.
 """
 
 REVISION_SYSTEM_PROMPT = """You are a senior Python engineer fixing a bug in an open source project.
-Your previous patch did not work.  You are given the issue, the failing test,
-the relevant source code and the error output of the previous attempt.
+Your previous attempt did not work.  You are given the issue, the failing test,
+the current source files and the error output of the previous attempt.
 
 Rules:
 - Diagnose why the previous attempt failed and fix the real problem.
 - Do NOT modify the test file, and do not weaken or delete any test.
-- Output ONLY a unified diff (git format) that can be applied with `git apply -p1`.
-- Wrap the diff in a single ```diff fenced code block.
+- Answer with JSON only, either a snippet replacement:
+
+  {"edits": [{"file": "relative/path.py", "old": "<exact snippet from the file>", "new": "<replacement>"}]}
+
+  or a whole function replacement:
+
+  {"edits": [{"file": "relative/path.py", "function": "<name>", "new": "<full corrected function>"}]}
+
+- `old` must be copied character for character from the source files, including
+  indentation, and must appear only once in that file.
+- `new` must be DIFFERENT from `old`: never repeat the buggy code.
+- Wrap the JSON in a single ```json fenced code block.
 """
 
 
@@ -52,6 +71,17 @@ def _format_context(chunks: Sequence[RetrievedChunk]) -> str:
     for retrieved in chunks:
         blocks.append(retrieved.format())
     return "\n\n".join(blocks)
+
+
+def _format_files(files: Sequence[Tuple[str, str]]) -> str:
+    """Render the exact content of the candidate files."""
+    if not files:
+        return "(no files were read)"
+    blocks = []
+    for path, content in files:
+        blocks.append(f"--- {path} ---\n{content.rstrip()}\n")
+
+    return "\n".join(blocks)
 
 
 def build_test_prompt(issue_title: str, issue_body: str, chunks: Sequence[RetrievedChunk]) -> str:
@@ -75,6 +105,8 @@ def build_patch_prompt(
     chunks: Sequence[RetrievedChunk],
     failure: str = "",
     previous_patch: str = "",
+    files: Sequence[Tuple[str, str]] = (),
+    repro_output: str = "",
 ) -> str:
     """Build the prompt asking for the fix."""
     sections = [
@@ -91,8 +123,18 @@ def build_patch_prompt(
         "Relevant source code (retrieved from the repository):",
         _format_context(chunks),
     ]
+    if repro_output:
+        sections += [
+            "",
+            "Output of the reproduction test on the current (still broken) code:",
+            "```",
+            repro_output.strip()[-3000:],
+            "```",
+        ]
+    if files:
+        sections += ["", "Exact content of the files you may edit:", "```", _format_files(files), "```"]
     if previous_patch:
-        sections += ["", "Your previous (failed) patch was:", "```diff", previous_patch.strip(), "```"]
+        sections += ["", "Your previous (failed) attempt was:", "```", previous_patch.strip(), "```"]
     if failure:
         sections += [
             "",
@@ -101,5 +143,5 @@ def build_patch_prompt(
             failure.strip()[-4000:],
             "```",
         ]
-    sections += ["", "Now produce the unified diff that fixes the bug."]
+    sections += ["", "Now produce the JSON edits that fix the bug."]
     return "\n".join(sections)

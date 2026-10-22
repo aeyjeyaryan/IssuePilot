@@ -416,6 +416,33 @@ def ensure_git_repo(repo_path: str | Path) -> bool:
         return False
 
 
+def reset_working_copy(repo_path: str | Path, keep: Sequence[str] = ()) -> Tuple[bool, str]:
+    """Revert tracked changes, keeping the files listed in ``keep``.
+
+    Every retry starts from the snapshot taken in :func:`ensure_git_repo` so a
+    failed attempt never leaks into the next one (and the model never patches
+    an already patched file).
+
+    Args:
+        repo_path: The working copy.
+        keep: Untracked paths that must survive the reset (the failing test).
+
+    Returns:
+        ``(ok, message)``.
+    """
+    repo = Path(repo_path)
+    if not shutil.which("git") or not (repo / ".git").exists():
+        return False, "Not a git repository; cannot reset the working copy"
+    checkout = subprocess.run(["git", "-C", str(repo), "checkout", "--", "."], capture_output=True, text=True)
+    if checkout.returncode != 0:
+        return False, checkout.stderr.strip() or "git checkout failed"
+    command = ["git", "-C", str(repo), "clean", "-fdq"]
+    for path in keep:
+        command.extend(["-e", path])
+    subprocess.run(command, capture_output=True, text=True)
+    return True, "Working copy reset to the snapshot"
+
+
 def write_file(repo_path: str | Path, relative_path: str, content: str) -> Path:
     """Write ``content`` to ``relative_path`` inside ``repo_path``.
 

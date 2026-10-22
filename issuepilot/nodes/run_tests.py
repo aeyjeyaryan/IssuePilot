@@ -10,9 +10,13 @@ from issuepilot.sandbox import SandboxRunner, collect_failures, summarize_pytest
 
 logger = logging.getLogger(__name__)
 
-
 def run_tests_node(state: Dict[str, Any]) -> Dict[str, Any]:
-    """Execute the tests of the working copy inside the sandbox."""
+    """Execute the tests of the working copy inside the sandbox.
+
+    Before trusting a passing run, the reproduction test is executed on its own
+    to make sure the agent actually reproduced the bug: a green test suite whose
+    repro test never failed is worthless evidence.
+    """
     logger.info("node=run_tests attempt=%s", state.get("attempts", 0))
     emit(STEP_START, step="run_tests")
     emit("log", message="Running the tests in the sandbox")
@@ -22,6 +26,7 @@ def run_tests_node(state: Dict[str, Any]) -> Dict[str, Any]:
         # The local fallback is only used for the bundled (trusted) demo code.
         allow_local = bool(state.get("demo_mode"))
         result = runner.run_tests(state["repo_path"], allow_local_fallback=allow_local)
+
 
         state["sandbox_ok"] = result.ok
         state["sandbox_output"] = result.output

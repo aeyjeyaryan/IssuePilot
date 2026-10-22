@@ -73,6 +73,10 @@ class Settings:
 
     # --- Agent ------------------------------------------------------------
     max_attempts: int = field(default_factory=lambda: _env_int("MAX_ATTEMPTS", 3))
+    #: Extra model calls made *before* a malformed patch reaches the sandbox.
+    #: Weak local models often emit slightly wrong snippets; asking again with
+    #: the parse error attached is much cheaper than a full sandbox round trip.
+    format_retries: int = field(default_factory=lambda: _env_int("FORMAT_RETRIES", 2))
     work_dir: str = field(default_factory=lambda: os.getenv("WORK_DIR", "./.issuepilot/runs"))
     log_level: str = field(default_factory=lambda: os.getenv("LOG_LEVEL", "INFO"))
     log_json: bool = field(default_factory=lambda: _env_bool("LOG_JSON", True))

@@ -61,6 +61,7 @@ class AgentState(TypedDict, total=False):
     relevant_chunks: List[Dict[str, Any]]
     failing_test: str
     failing_test_path: str
+    repro_output: str
     patch: str
     patch_problems: List[str]
     patch_applied: bool
@@ -71,9 +72,15 @@ class AgentState(TypedDict, total=False):
     sandbox_output: str
     sandbox_backend: str
     sandbox_duration: float
+    sandbox_success: bool
     test_summary: str
     failing_tests: List[str]
     attempts: int
+    max_attempts: int
+    fatal: bool
+    warning: str
+    store: str
+    run_id: str
 
     # final results
     branch: str

@@ -7,10 +7,12 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
+from issuepilot.config import settings
 from issuepilot.events import STEP_START, emit
 from issuepilot.llm import LLMClient, LLMError
 from issuepilot.prompts import TEST_SYSTEM_PROMPT, build_test_prompt
 from issuepilot.retrieval import RetrievedChunk
+from issuepilot.sandbox import SandboxRunner
 
 logger = logging.getLogger(__name__)
 
@@ -74,6 +76,37 @@ def _retrieved(state: Dict[str, Any]) -> List[RetrievedChunk]:
     return chunks
 
 
+def _reproduction_status(state: Dict[str, Any], repo_path: Path) -> tuple[str, str]:
+    """Run the reproduction test on the *unfixed* code.
+
+    Returns:
+        ``(status, detail)`` where status is ``"failed"`` (good: the bug is
+        reproduced), ``"passed"`` (the test does not reproduce the bug) or
+        ``"error"`` (the test cannot even be collected).
+    """
+    runner = SandboxRunner()
+    result = runner.run_tests(
+        repo_path,
+        test_command=_repro_command(),
+        allow_local_fallback=bool(state.get("demo_mode")),
+    )
+    output = result.output or ""
+    if result.ok:
+        return "passed", "the test passes on the current (buggy) code, so it does not reproduce the bug"
+    if "error" in output.lower() and "failed" not in output.lower():
+        return "error", "the test could not be run:\n" + output.strip()[-1500:]
+    return "failed", output.strip()[-3000:]
+
+
+def _repro_command() -> str:
+    """Return the pytest command that runs only the reproduction test."""
+    parts = settings.sandbox_test_command.split()
+    for index, part in enumerate(parts):
+        if "pytest" in part:
+            return " ".join(parts[: index + 1] + [REPRO_TEST_RELPATH])
+    return f"pytest {REPRO_TEST_RELPATH}"
+
+
 def write_failing_test_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Ask the model for a reproduction test and store it in the repository."""
     logger.info("node=write_failing_test")
@@ -83,24 +116,54 @@ def write_failing_test_node(state: Dict[str, Any]) -> Dict[str, Any]:
     issue = state.get("issue", {})
     try:
         client: LLMClient = state["llm"]
+        repo_path = Path(state["repo_path"])
+        _ensure_repo_on_sys_path(repo_path)
+        target = repo_path / REPRO_TEST_RELPATH
+        target.parent.mkdir(parents=True, exist_ok=True)
+
         prompt = build_test_prompt(
             issue.get("title", ""),
             issue.get("body", ""),
             _retrieved(state),
         )
-        raw = client.generate_test(TEST_SYSTEM_PROMPT, prompt)
-        code = extract_code(raw)
-        if not code.strip():
-            state["error"] = "The model did not return a test file"
+        feedback = ""
+        rounds = max(1, int(settings.format_retries) + 1)
+        code = ""
+        for attempt in range(rounds):
+            raw = client.generate_test(TEST_SYSTEM_PROMPT, prompt)
+            code = extract_code(raw)
+            if not code.strip():
+                feedback = "You did not return a test file."
+                continue
+            target.write_text(code.rstrip() + "\n", encoding="utf-8")
+            status, detail = _reproduction_status(state, repo_path)
+            state["repro_output"] = detail or ""
+            if status == "failed":
+                emit(
+                    "log",
+                    message=(
+                        "The reproduction test fails on the current code, as it should"
+                        if attempt == 0
+                        else "The new reproduction test fails on the current code, as it should"
+                    ),
+                )
+                break
+            feedback = detail
+            logger.info("node=write_failing_test attempt=%s status=%s", attempt + 1, status)
+            emit("log", message=f"The reproduction test was rejected: {detail}")
+            prompt = build_test_prompt(
+                issue.get("title", ""),
+                issue.get("body", ""),
+                _retrieved(state),
+            ) + f"\n\nYour previous test was rejected: {detail}\nWrite a different test."
+        else:
+            state["error"] = (
+                "The model could not write a test that reproduces the bug: " + (feedback or "unknown reason")
+            )
             state["fatal"] = True
+            logger.error("node=write_failing_test error=%s", state["error"])
             emit("error", message=state["error"])
             return state
-
-        repo_path = Path(state["repo_path"])
-        _ensure_repo_on_sys_path(repo_path)
-        target = repo_path / REPRO_TEST_RELPATH
-        target.parent.mkdir(parents=True, exist_ok=True)
-        target.write_text(code.rstrip() + "\n", encoding="utf-8")
 
         state["failing_test"] = code
         state["failing_test_path"] = REPRO_TEST_RELPATH
