@@ -1,0 +1,10 @@
+diff --git a/lists.py b/lists.py
+index 8cdb39b..e92e9ae 100644
+--- a/lists.py
++++ b/lists.py
+@@ -22,4 +22,4 @@ def unique(items):
+ 
+ def chunk(items, size):
+     """Split ``items`` into chunks of at most ``size`` elements."""
+-    return [items[i : i + size] for i in range(0, len(items) - size + 1, size)]
++    return [items[i : i + size] for i in range(0, len(items), size)]
