@@ -145,3 +145,42 @@ def build_patch_prompt(
         ]
     sections += ["", "Now produce the JSON edits that fix the bug."]
     return "\n".join(sections)
+
+
+ROOT_CAUSE_SYSTEM_PROMPT = """You are a senior Python engineer writing the summary of a bug fix.
+
+You are given the issue, the reproduction test and the diff of the fix.
+
+Rules:
+- Explain WHY the bug happened, in two or three sentences.
+- Name the function or expression that was wrong.
+- Do not repeat the diff, do not add code, do not use markdown headers.
+- Answer with plain prose only.
+"""
+
+
+def build_root_cause_prompt(
+    issue_title: str,
+    issue_body: str,
+    test_code: str,
+    diff_text: str,
+) -> str:
+    """Build the prompt asking for the root cause of the bug."""
+    sections = [
+        f"Issue title: {issue_title}",
+        "",
+        "Issue body:",
+        issue_body or "(the issue body was empty)",
+        "",
+        "Reproduction test:",
+        "```python",
+        (test_code or "").strip(),
+        "```",
+        "",
+        "Fix:",
+        "```diff",
+        (diff_text or "").strip()[:6000],
+        "```",
+    ]
+    sections += ["", "Explain the root cause of the bug in two or three sentences."]
+    return "\n".join(sections)

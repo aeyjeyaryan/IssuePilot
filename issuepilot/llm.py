@@ -116,6 +116,13 @@ class ReferenceBackend:
             return test_file.read_text(encoding="utf-8")
         return None
 
+    def root_cause(self) -> Optional[str]:
+        """Return the reference root cause analysis, if present."""
+        cause_file = self.reference_dir / "root_cause.txt"
+        if cause_file.exists():
+            return cause_file.read_text(encoding="utf-8").strip()
+        return None
+
 
 class LLMClient:
     """High-level façade over the available LLM backends."""
@@ -192,3 +199,16 @@ class LLMClient:
     def reference_test(self) -> Optional[str]:
         """Return the reference reproduction test when using the demo backend."""
         return self._reference.reference_test() if self._reference else None
+
+    def generate_root_cause(self, system: str, prompt: str) -> str:
+        """Explain why the bug happened.
+
+        The reference backend replays the explanation that ships with the demo
+        repository; the Ollama backend asks the model.
+        """
+        if self._use_reference() and self._reference is not None:
+            cause = self._reference.root_cause()
+            if cause:
+                return cause
+            return ""
+        return self._ollama.generate(system, prompt)

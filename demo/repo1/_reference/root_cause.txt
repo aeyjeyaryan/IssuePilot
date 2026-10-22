@@ -1,0 +1,3 @@
+`calc.add` was implemented with `return a - b`, so the helper subtracted its
+arguments instead of adding them. The multiplication and mean helpers were
+correct, which is why only the addition was broken.

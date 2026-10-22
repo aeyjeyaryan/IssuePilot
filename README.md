@@ -110,7 +110,7 @@ that the CLI prints and the web UI streams.
 | 6 | `apply_patch` | Turn the edits into a unified diff and apply it with `git apply` (with a pure-python fallback). |
 | 7 | `run_tests` | Run the whole suite in the sandbox. If it fails, the failure output goes back into step 5. |
 | 8 | `open_pr` | Create a branch, commit, push and open the pull request (skipped in dry-run mode). |
-| 9 | `finalize` | Write `report.md`: what was broken, what changed, which tests ran, and what the agent could not solve. |
+| 9 | `finalize` | Ask the model for a root cause analysis, then write `report.md`: what was broken, why, what changed, which tests ran, and what the agent could not solve. |
 
 The graph retries steps 5–7 up to `MAX_ATTEMPTS` times. Every retry starts from
 the original snapshot, so a failed attempt never leaks into the next one.
@@ -215,10 +215,11 @@ deliberate bug, an issue describing it and a test that catches it:
 | `repo2` | `strings.truncate` ignores the ellipsis length | `len(truncate("hello world", 8)) == 8` |
 | `repo3` | `lists.chunk` drops the last partial chunk | `chunk([1,2,3,4,5], 2) == [[1,2],[3,4],[5]]` |
 
-Each demo ships a `_reference/` directory with the expected patch and the
-reference reproduction test. The `reference` LLM backend replays them, which
-is what makes the offline demo deterministic. `_reference` is excluded from
-the working copy, so the agent never sees the answer.
+Each demo ships a `_reference/` directory with the expected patch, the
+reference reproduction test and a short root cause analysis. The `reference`
+LLM backend replays them, which is what makes the offline demo deterministic.
+`_reference` is excluded from the working copy, so the agent never sees the
+answer.
 
 ---
 

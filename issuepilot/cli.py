@@ -117,9 +117,12 @@ def demo(
         if not keep:
             import shutil
 
+            # Only the working copy is removed; the report and the patch stay
+            # available for inspection.
             run_dir = Path(state.get("run_dir", ""))
-            if run_dir and run_dir.exists():
-                shutil.rmtree(run_dir, ignore_errors=True)
+            for junk in (run_dir / "repo", run_dir / "repo.patch"):
+                if junk.exists():
+                    shutil.rmtree(junk, ignore_errors=True) if junk.is_dir() else junk.unlink()
 
     console.print()
     if failures:

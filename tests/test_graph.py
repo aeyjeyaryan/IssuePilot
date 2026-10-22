@@ -100,6 +100,8 @@ def test_demo_run_fixes_the_bug(tmp_path: Path) -> None:
     assert "calc.py" in state["diff"]
     assert state["report"]
     assert "Root cause" in state["report"]
+    # The reference backend replays the explanation of the demo repository.
+    assert state["root_cause"].strip()
 
 
 def test_demo_run_never_touches_github(tmp_path: Path) -> None:

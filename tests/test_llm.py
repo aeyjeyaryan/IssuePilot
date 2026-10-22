@@ -84,3 +84,16 @@ def test_the_ollama_backend_reports_an_http_error(monkeypatch: pytest.MonkeyPatc
     backend = OllamaBackend(base_url="http://ollama.test")
     with pytest.raises(LLMError):
         backend.generate("system", "prompt")
+
+
+def test_the_reference_backend_replays_the_root_cause(tmp_path: Path) -> None:
+    (tmp_path / "solution.patch").write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+    (tmp_path / "root_cause.txt").write_text("The operator was wrong.\n", encoding="utf-8")
+    client = LLMClient(backend="reference", reference_dir=tmp_path)
+    assert client.generate_root_cause("system", "prompt").strip() == "The operator was wrong."
+
+
+def test_a_missing_root_cause_is_empty(tmp_path: Path) -> None:
+    (tmp_path / "solution.patch").write_text("--- a/x\n+++ b/x\n", encoding="utf-8")
+    client = LLMClient(backend="reference", reference_dir=tmp_path)
+    assert client.generate_root_cause("system", "prompt") == ""

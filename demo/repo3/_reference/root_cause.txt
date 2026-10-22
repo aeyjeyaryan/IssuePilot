@@ -1,0 +1,3 @@
+`lists.chunk` built its comprehension with `range(0, len(items) - size + 1, size)`,
+which stops one element too early and therefore drops the last, partial chunk
+whenever the length of the list is not a multiple of `size`.

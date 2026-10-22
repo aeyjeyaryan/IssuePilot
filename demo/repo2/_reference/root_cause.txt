@@ -1,0 +1,4 @@
+`strings.truncate` sliced the text to `max_length` characters and *then*
+appended the three character ellipsis, so the result was always three
+characters longer than requested. The length of the ellipsis has to be taken
+into account when the text is cut.
