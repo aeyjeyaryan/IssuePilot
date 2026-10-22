@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict, List
 
-from issuepilot.events import emit
+from issuepilot.events import STEP_START, emit
 from issuepilot.llm import LLMClient, LLMError
 from issuepilot.patch import extract_diff, validate_diff
 from issuepilot.prompts import PATCH_SYSTEM_PROMPT, REVISION_SYSTEM_PROMPT, build_patch_prompt
@@ -40,6 +40,7 @@ def draft_fix_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Ask the model for a unified diff that fixes the bug."""
     revision = bool(state.get("patch_error") or state.get("sandbox_output") and not state.get("sandbox_success"))
     logger.info("node=draft_fix revision=%s attempt=%s", revision, state.get("attempts", 0) + 1)
+    emit(STEP_START, step="draft_fix")
     emit("log", message="Drafting the fix" if not revision else "Revising the fix after the failed attempt")
 
     issue = state.get("issue", {})

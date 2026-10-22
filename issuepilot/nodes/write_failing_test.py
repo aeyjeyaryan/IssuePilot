@@ -7,7 +7,7 @@ import re
 from pathlib import Path
 from typing import Any, Dict, List
 
-from issuepilot.events import emit
+from issuepilot.events import STEP_START, emit
 from issuepilot.llm import LLMClient, LLMError
 from issuepilot.prompts import TEST_SYSTEM_PROMPT, build_test_prompt
 from issuepilot.retrieval import RetrievedChunk
@@ -77,6 +77,7 @@ def _retrieved(state: Dict[str, Any]) -> List[RetrievedChunk]:
 def write_failing_test_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Ask the model for a reproduction test and store it in the repository."""
     logger.info("node=write_failing_test")
+    emit(STEP_START, step="write_failing_test")
     emit("log", message="Writing the failing reproduction test")
 
     issue = state.get("issue", {})

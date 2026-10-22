@@ -3,135 +3,330 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>IssuePilot</title>
+<title>IssuePilot &middot; issue to pull request</title>
 <style>
-  :root { --bg:#0d1117; --fg:#c9d1d9; --accent:#58a6ff; --ok:#3fb950; --err:#f85149; --muted:#8b949e; --panel:#161b22; }
-  * { box-sizing:border-box; }
-  body { margin:0; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; background:var(--bg); color:var(--fg); }
-  header { padding:16px 24px; border-bottom:1px solid #30363d; display:flex; align-items:center; gap:12px; }
-  header h1 { font-size:18px; margin:0; }
-  header .tag { color:var(--muted); font-size:12px; }
-  main { max-width:1100px; margin:0 auto; padding:24px; display:grid; gap:16px; }
-  .panel { background:var(--panel); border:1px solid #30363d; border-radius:8px; padding:16px; }
-  .panel h2 { font-size:14px; margin:0 0 12px; color:var(--muted); text-transform:uppercase; letter-spacing:.05em; }
-  input[type=text] { width:100%; padding:10px; background:var(--bg); border:1px solid #30363d; border-radius:6px; color:var(--fg); font-size:14px; }
-  button { padding:10px 18px; background:var(--accent); color:#fff; border:0; border-radius:6px; font-size:14px; cursor:pointer; font-weight:600; }
-  button:disabled { opacity:.5; cursor:not-allowed; }
-  button.secondary { background:#30363d; }
-  .row { display:flex; gap:12px; align-items:center; flex-wrap:wrap; margin-top:12px; }
-  label.toggle { display:flex; align-items:center; gap:6px; font-size:13px; color:var(--muted); cursor:pointer; }
-  #steps { display:flex; flex-wrap:wrap; gap:8px; }
-  .step { padding:6px 12px; border-radius:999px; font-size:12px; border:1px solid #30363d; color:var(--muted); }
-  .step.running { border-color:var(--accent); color:var(--accent); }
-  .step.completed { border-color:var(--ok); color:var(--ok); background:rgba(63,185,80,.08); }
-  .step.failed { border-color:var(--err); color:var(--err); }
-  #logs { max-height:340px; overflow-y:auto; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; font-size:12px; line-height:1.6; }
-  .log { padding:3px 0; border-bottom:1px solid #21262d; white-space:pre-wrap; word-break:break-word; }
-  .log .t { color:var(--muted); margin-right:8px; }
-  pre { background:var(--bg); border:1px solid #30363d; border-radius:6px; padding:12px; overflow-x:auto; font-size:12px; }
-  .banner { padding:10px 12px; border-radius:6px; font-size:13px; margin-top:12px; }
-  .banner.ok { background:rgba(63,185,80,.12); border:1px solid var(--ok); color:var(--ok); }
-  .banner.err { background:rgba(248,81,73,.12); border:1px solid var(--err); color:var(--err); }
-  .hidden { display:none; }
+  :root {
+    --bg: #0d1117; --panel: #161b22; --border: #30363d; --fg: #c9d1d9;
+    --muted: #8b949e; --accent: #58a6ff; --ok: #3fb950; --err: #f85149; --warn: #d29922;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    background: var(--bg); color: var(--fg);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    font-size: 14px; line-height: 1.5;
+  }
+  header {
+    display: flex; align-items: center; gap: 14px; flex-wrap: wrap;
+    padding: 14px 26px; border-bottom: 1px solid var(--border); background: #010409cc;
+    position: sticky; top: 0; z-index: 10; backdrop-filter: blur(6px);
+  }
+  header h1 { font-size: 17px; margin: 0; letter-spacing: .2px; }
+  header .logo {
+    width: 26px; height: 26px; border-radius: 7px; display: grid; place-items: center;
+    background: linear-gradient(135deg, #58a6ff, #a371f7); color: #010409; font-weight: 800; font-size: 13px;
+  }
+  header .sub { color: var(--muted); font-size: 12px; }
+  main { max-width: 1180px; margin: 0 auto; padding: 22px; display: grid; gap: 16px; }
+  .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+  @media (max-width: 900px) { .grid-2 { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--border); border-radius: 10px; padding: 16px 18px; }
+  .panel > h2 {
+    font-size: 11px; margin: 0 0 12px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .09em; font-weight: 700;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel > h2 .badge {
+    margin-left: auto; text-transform: none; letter-spacing: 0; font-weight: 500;
+    font-size: 11px; color: var(--muted);
+  }
+  input[type=text], select {
+    width: 100%; padding: 10px 12px; background: var(--bg); color: var(--fg);
+    border: 1px solid var(--border); border-radius: 7px; font-size: 13px; font-family: inherit;
+  }
+  input[type=text]:focus, select:focus { outline: none; border-color: var(--accent); }
+  button {
+    padding: 9px 16px; background: var(--accent); color: #04121f; border: 0; border-radius: 7px;
+    font-size: 13px; font-weight: 700; cursor: pointer; font-family: inherit;
+  }
+  button:hover:not(:disabled) { filter: brightness(1.1); }
+  button:disabled { opacity: .45; cursor: not-allowed; }
+  button.secondary { background: #30363d; color: var(--fg); }
+  .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin-top: 12px; }
+  .toggle { display: flex; align-items: center; gap: 7px; font-size: 13px; color: var(--muted); cursor: pointer; user-select: none; }
+  .toggle input { accent-color: var(--accent); }
+  .hint { color: var(--muted); font-size: 12px; margin-top: 10px; }
+  #steps { display: flex; flex-wrap: wrap; gap: 8px; }
+  .step {
+    padding: 6px 12px; border-radius: 999px; font-size: 12px; border: 1px solid var(--border);
+    color: var(--muted); background: #0d1117; display: flex; align-items: center; gap: 6px;
+  }
+  .step .dot { width: 7px; height: 7px; border-radius: 50%; background: #484f58; }
+  .step.running { border-color: var(--accent); color: var(--accent); }
+  .step.running .dot { background: var(--accent); animation: pulse 1s infinite; }
+  .step.done { border-color: var(--ok); color: var(--ok); }
+  .step.done .dot { background: var(--ok); }
+  .step.failed { border-color: var(--err); color: var(--err); }
+  .step.failed .dot { background: var(--err); }
+  @keyframes pulse { 0%,100% { opacity: 1 } 50% { opacity: .25 } }
+  #logs {
+    height: 340px; overflow-y: auto; font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+    font-size: 12px; line-height: 1.65; background: #010409; border: 1px solid var(--border);
+    border-radius: 8px; padding: 10px 12px;
+  }
+  .log { white-space: pre-wrap; word-break: break-word; border-bottom: 1px solid #161b22; padding: 1px 0; }
+  .log .t { color: #484f58; margin-right: 9px; }
+  .log.lvl-WARNING { color: var(--warn); }
+  .log.lvl-ERROR { color: var(--err); }
+  .log.lvl-INFO { color: #adbac7; }
+  pre {
+    background: #010409; border: 1px solid var(--border); border-radius: 8px; padding: 12px;
+    overflow: auto; font-size: 12px; line-height: 1.5; max-height: 460px; margin: 0;
+    font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  .banner { display: none; padding: 11px 14px; border-radius: 8px; font-size: 13px; margin-top: 12px; }
+  .banner.show { display: block; }
+  .banner.ok { background: rgba(63,185,80,.12); border: 1px solid var(--ok); color: var(--ok); }
+  .banner.err { background: rgba(248,81,73,.12); border: 1px solid var(--err); color: var(--err); }
+  .banner.warn { background: rgba(210,153,34,.12); border: 1px solid var(--warn); color: var(--warn); }
+  .meta { display: flex; flex-wrap: wrap; gap: 14px; font-size: 12px; color: var(--muted); margin-top: 10px; }
+  .meta b { color: var(--fg); font-weight: 600; }
+  a { color: var(--accent); }
+  .empty { color: var(--muted); font-style: italic; }
 </style>
 </head>
 <body>
 <header>
+  <div class="logo">IP</div>
   <h1>IssuePilot</h1>
-  <span class="tag">issue &rarr; test &rarr; fix &rarr; PR</span>
+  <span class="sub">issue &rarr; failing test &rarr; fix &rarr; sandboxed tests &rarr; pull request</span>
 </header>
+
 <main>
   <section class="panel">
-    <h2>Issue</h2>
-    <input type="text" id="issueUrl" placeholder="https://github.com/owner/repo/issues/123">
+    <h2>1 &middot; Give the agent an issue</h2>
+    <input type="text" id="issueUrl" placeholder="https://github.com/owner/repo/issues/123" spellcheck="false">
     <div class="row">
       <button id="runBtn">Run agent</button>
-      <button id="demoBtn" class="secondary">Run demo (offline)</button>
-      <label class="toggle"><input type="checkbox" id="dryRun" checked> Dry run (no PR)</label>
+      <button id="demoBtn" class="secondary">Run offline demo</button>
+      <select id="demoRepo" style="width:auto">
+        <option value="repo1">demo: repo1 (arithmetic)</option>
+        <option value="repo2">demo: repo2 (strings)</option>
+        <option value="repo3">demo: repo3 (lists)</option>
+      </select>
+      <label class="toggle"><input type="checkbox" id="dryRun" checked> Dry run (never opens a PR)</label>
     </div>
-    <div id="banner" class="banner hidden"></div>
+    <div class="hint">
+      The demo runs the complete pipeline against a bundled buggy repository &mdash; no GitHub, no network, no LLM required.
+    </div>
+    <div id="banner" class="banner"></div>
   </section>
 
   <section class="panel">
-    <h2>Steps</h2>
+    <h2>2 &middot; Agent steps <span class="badge" id="stepBadge"></span></h2>
     <div id="steps"></div>
   </section>
 
   <section class="panel">
-    <h2>Agent log</h2>
+    <h2>3 &middot; Live log <span class="badge" id="logBadge"></span></h2>
     <div id="logs"></div>
   </section>
 
-  <section class="panel" id="diffPanel">
-    <h2>Patch / Diff</h2>
-    <pre id="diff">No patch yet.</pre>
-  </section>
+  <div class="grid-2">
+    <section class="panel">
+      <h2>4 &middot; Patch</h2>
+      <pre id="diff" class="empty">No patch yet.</pre>
+    </section>
+    <section class="panel">
+      <h2>5 &middot; Test report</h2>
+      <pre id="tests" class="empty">No test run yet.</pre>
+      <div class="meta" id="meta"></div>
+    </section>
+  </div>
 </main>
+
 <script>
-const STEPS = ["fetch_issue","clone_repo","index_codebase","write_failing_test","draft_fix","apply_patch","run_in_sandbox","open_pr"];
+const STEPS = [
+  ["fetch_issue", "fetch issue"],
+  ["prepare_repo", "clone repo"],
+  ["index_codebase", "index code"],
+  ["write_failing_test", "write failing test"],
+  ["draft_fix", "draft fix"],
+  ["apply_patch", "apply patch"],
+  ["run_tests", "run tests"],
+  ["open_pr", "open PR"],
+  ["finalize", "report"]
+];
+
 const stepsEl = document.getElementById('steps');
 const logsEl = document.getElementById('logs');
-STEPS.forEach(s => {
-  const d = document.createElement('div');
-  d.className = 'step'; d.id = 'step-' + s; d.textContent = s;
-  stepsEl.appendChild(d);
+const diffEl = document.getElementById('diff');
+const testsEl = document.getElementById('tests');
+const bannerEl = document.getElementById('banner');
+const metaEl = document.getElementById('meta');
+
+const stepNodes = {};
+STEPS.forEach(([id, label]) => {
+  const el = document.createElement('div');
+  el.className = 'step';
+  el.innerHTML = '<span class="dot"></span>' + label;
+  stepsEl.appendChild(el);
+  stepNodes[id] = el;
 });
-function log(msg) {
+
+function setStep(id, status) {
+  const el = stepNodes[id];
+  if (!el) return;
+  el.className = 'step' + (status ? ' ' + status : '');
+}
+
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+function log(message, level) {
   const t = new Date().toLocaleTimeString();
-  const d = document.createElement('div');
-  d.className = 'log';
-  d.innerHTML = '<span class="t">' + t + '</span>' + escapeHtml(msg);
-  logsEl.appendChild(d);
+  const div = document.createElement('div');
+  div.className = 'log lvl-' + (level || 'INFO');
+  div.innerHTML = '<span class="t">' + t + '</span>' + esc(message);
+  logsEl.appendChild(div);
   logsEl.scrollTop = logsEl.scrollHeight;
+  document.getElementById('logBadge').textContent = logsEl.childElementCount + ' events';
 }
-function escapeHtml(s){ return String(s).replace(/[&<>]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;'}[c])); }
-function setStep(name, status) {
-  const el = document.getElementById('step-' + name);
-  if (el) el.className = 'step ' + status;
+
+function banner(text, kind) {
+  bannerEl.className = 'banner show ' + (kind || 'ok');
+  bannerEl.innerHTML = text;
 }
-function banner(text, ok) {
-  const b = document.getElementById('banner');
-  b.className = 'banner ' + (ok ? 'ok' : 'err');
-  b.textContent = text;
-  b.classList.remove('hidden');
+
+function reset() {
+  logsEl.innerHTML = '';
+  diffEl.textContent = 'No patch yet.';
+  diffEl.className = 'empty';
+  testsEl.textContent = 'No test run yet.';
+  testsEl.className = 'empty';
+  metaEl.innerHTML = '';
+  bannerEl.className = 'banner';
+  Object.values(stepNodes).forEach(el => { el.className = 'step'; });
+  document.getElementById('stepBadge').textContent = '';
 }
-document.getElementById('runBtn').onclick = () => start(false);
-document.getElementById('demoBtn').onclick = () => start(true);
+
 async function start(demo) {
+  reset();
   document.getElementById('runBtn').disabled = true;
   document.getElementById('demoBtn').disabled = true;
-  logsEl.innerHTML = '';
-  STEPS.forEach(s => setStep(s, ''));
-  const dry = document.getElementById('dryRun').checked;
-  const url = document.getElementById('issueUrl').value || 'demo://local/1';
-  let res;
+
+  const dryRun = document.getElementById('dryRun').checked;
+  const payload = {
+    issue_url: demo ? '' : (document.getElementById('issueUrl').value || ''),
+    dry_run: dryRun,
+    demo: demo,
+    demo_repo: demo ? document.getElementById('demoRepo').value : null
+  };
+
+  let created;
   try {
-    res = await fetch('/run', {method:'POST', headers:{'Content-Type':'application/json'},
-      body: JSON.stringify({issue_url:url, dry_run:dry, demo_mode:demo})});
-  } catch (e) { banner('Backend unreachable: ' + e.message, false); return; }
-  const {run_id} = await res.json();
-  const es = new EventSource('/stream/' + run_id + '?dry_run=' + dry + '&demo_mode=' + demo);
-  es.addEventListener('step', e => {
+    const response = await fetch('/api/runs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+    created = await response.json();
+  } catch (err) {
+    banner('Could not reach the IssuePilot API: ' + esc(err.message), 'err');
+    enableButtons();
+    return;
+  }
+  if (created.detail) {
+    banner(esc(created.detail), 'err');
+    enableButtons();
+    return;
+  }
+
+  log('Run ' + created.run_id + ' started', 'INFO');
+  const source = new EventSource('/api/runs/' + created.run_id + '/events');
+  source.addEventListener('log', e => {
     const d = JSON.parse(e.data);
-    setStep(d.step, d.status);
-    if (d.status === 'running') log('▶ ' + d.step);
+    log(d.data.message, d.data.level);
   });
-  es.addEventListener('log', e => log(JSON.parse(e.data).message));
-  es.addEventListener('complete', e => {
+  source.addEventListener('step_start', e => {
     const d = JSON.parse(e.data);
-    banner(d.status === 'success' ? 'Completed successfully.' : 'Completed with failures.', d.status === 'success');
-    if (d.patch) document.getElementById('diff').textContent = d.patch;
-    es.close();
-    document.getElementById('runBtn').disabled = false;
-    document.getElementById('demoBtn').disabled = false;
+    if (d.data.step && stepNodes[d.data.step]) setStep(d.data.step, 'running');
   });
-  es.addEventListener('error', e => {
-    banner('Stream error', false);
-    es.close();
-    document.getElementById('runBtn').disabled = false;
-    document.getElementById('demoBtn').disabled = false;
+  source.addEventListener('step_end', e => {
+    const d = JSON.parse(e.data);
+    setStep(d.data.step, 'done');
+  });
+  source.addEventListener('diff', e => {
+    const d = JSON.parse(e.data);
+    diffEl.textContent = d.data.diff;
+    diffEl.className = '';
+  });
+  source.addEventListener('test_report', e => {
+    const d = JSON.parse(e.data);
+    testsEl.textContent = d.data.output || '(no output)';
+    testsEl.className = '';
+    if (d.data.summary) log('pytest: ' + d.data.summary, d.data.ok ? 'INFO' : 'ERROR');
+  });
+  source.addEventListener('report', e => {
+    const d = JSON.parse(e.data);
+    if (d.data.diff && diffEl.className === 'empty') {
+      diffEl.textContent = d.data.diff;
+      diffEl.className = '';
+    }
+  });
+  source.addEventListener('error', e => {
+    try {
+      const d = JSON.parse(e.data);
+      log(d.data.message, 'ERROR');
+    } catch (err) { log('Stream error', 'ERROR'); }
+  });
+  source.addEventListener('done', e => {
+    const d = JSON.parse(e.data);
+    const outcome = d.data.outcome;
+    if (outcome === 'fixed') {
+      banner('<b>Fixed.</b> The agent wrote a failing test, produced a patch and the suite passes in the sandbox.', 'ok');
+    } else if (outcome === 'gave-up') {
+      banner('<b>Gave up.</b> The agent exhausted its attempts &mdash; the report below contains the details.', 'warn');
+    } else {
+      banner('<b>Error.</b> ' + esc(outcome || 'the run failed'), 'err');
+    }
+    source.close();
+    enableButtons();
+    refreshMeta(created.run_id);
   });
 }
+
+function enableButtons() {
+  document.getElementById('runBtn').disabled = false;
+  document.getElementById('demoBtn').disabled = false;
+}
+
+async function refreshMeta(runId) {
+  try {
+    const response = await fetch('/api/runs/' + runId);
+    const data = await response.json();
+    const s = data.state || {};
+    const rows = [
+      ['outcome', s.outcome],
+      ['attempts', s.attempts],
+      ['chunks indexed', s.chunks_count],
+      ['vector store', s.store],
+      ['sandbox', s.sandbox_backend],
+      ['branch', s.branch],
+      ['pull request', s.pr_url]
+    ];
+    metaEl.innerHTML = rows
+      .filter(r => r[1] !== undefined && r[1] !== null && r[1] !== '')
+      .map(r => '<span>' + r[0] + ': <b>' + esc(r[1]) + '</b></span>')
+      .join('');
+  } catch (err) { /* the run is over, metadata is optional */ }
+}
+
+document.getElementById('runBtn').onclick = () => start(false);
+document.getElementById('demoBtn').onclick = () => start(true);
+document.getElementById('issueUrl').addEventListener('keydown', e => { if (e.key === 'Enter') start(false); });
 </script>
 </body>
 </html>

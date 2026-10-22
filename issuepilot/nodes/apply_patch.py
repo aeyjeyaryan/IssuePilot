@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
-from issuepilot.events import DIFF, emit
+from issuepilot.events import DIFF, STEP_START, emit
 from issuepilot.patch import apply_unified_diff
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 def apply_patch_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Apply the patch, recording a readable error when it does not apply."""
     logger.info("node=apply_patch attempt=%s", state.get("attempts", 0))
+    emit(STEP_START, step="apply_patch")
     emit("log", message="Applying the patch")
 
     diff_text = state.get("patch", "")

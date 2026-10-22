@@ -18,7 +18,8 @@ import json
 import logging
 import uuid
 from pathlib import Path
-from typing import Any, Dict, Optional
+from contextlib import asynccontextmanager
+from typing import Any, AsyncIterator, Dict, Optional
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,7 +35,15 @@ logger = logging.getLogger(__name__)
 
 WEB_DIR = Path(__file__).resolve().parent.parent / "web"
 
-app = FastAPI(title="IssuePilot API", version="0.1.0")
+
+@asynccontextmanager
+async def lifespan(_: FastAPI) -> AsyncIterator[None]:
+    """Configure logging when the server starts."""
+    setup_logging(settings.log_level, json_output=True)
+    yield
+
+
+app = FastAPI(title="IssuePilot API", version="0.1.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
@@ -76,12 +85,6 @@ def _demo_paths(name: str) -> tuple[Path, Path]:
     """Return the (repository, issue) paths of a demo issue."""
     root = settings.demo_root / name
     return root, root / "ISSUE.md"
-
-
-@app.on_event("startup")
-async def _startup() -> None:
-    """Configure logging when the server starts."""
-    setup_logging(settings.log_level, json_output=True)
 
 
 @app.get("/")
@@ -172,7 +175,8 @@ async def stream_events(run_id: str) -> Any:
             while True:
                 event = await queue.get()
                 if event.kind == "done":
-                    yield f"event: done\ndata: {json.dumps({'outcome': record.state.get('outcome')})}\n\n"
+                    payload = json.dumps({"kind": "done", "data": {"outcome": record.state.get("outcome")}})
+                    yield f"event: done\ndata: {payload}\n\n"
                     break
                 payload = json.dumps(event.to_dict(), default=str)
                 yield f"event: {event.kind}\ndata: {payload}\n\n"

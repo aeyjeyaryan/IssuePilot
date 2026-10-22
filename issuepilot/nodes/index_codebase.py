@@ -6,7 +6,7 @@ import logging
 from typing import Any, Dict
 
 from issuepilot.config import settings
-from issuepilot.events import emit
+from issuepilot.events import STEP_START, emit
 from issuepilot.retrieval import CodeChunker, Retriever
 
 logger = logging.getLogger(__name__)
@@ -15,6 +15,7 @@ logger = logging.getLogger(__name__)
 def index_codebase_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Chunk the repository, store it in the vector store and query it."""
     logger.info("node=index_codebase repo=%s", state.get("repo_path"))
+    emit(STEP_START, step="index_codebase")
     emit("log", message="Indexing the codebase")
 
     try:

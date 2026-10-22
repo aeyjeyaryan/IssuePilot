@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from issuepilot.events import REPORT, emit
+from issuepilot.events import REPORT, STEP_START, emit
 from issuepilot.report import build_pr_body, build_report, working_tree_diff
 
 logger = logging.getLogger(__name__)
@@ -18,6 +18,7 @@ def finalize_node(state: Dict[str, Any]) -> Dict[str, Any]:
     a successful fix and when the agent gave up after exhausting its attempts.
     """
     logger.info("node=finalize attempts=%s ok=%s", state.get("attempts", 0), state.get("sandbox_ok"))
+    emit(STEP_START, step="finalize")
     emit("log", message="Building the final report")
 
     if state.get("sandbox_ok"):

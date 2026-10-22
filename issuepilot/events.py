@@ -52,7 +52,7 @@ class EventBus:
     # -- subscription ------------------------------------------------------
     def subscribe(self) -> asyncio.Queue:
         """Register an asyncio queue as a subscriber (call from the loop thread)."""
-        loop = asyncio.get_event_loop()
+        loop = asyncio.get_running_loop()
         queue: asyncio.Queue = asyncio.Queue()
         with self._lock:
             self._subscribers.append((loop, queue))

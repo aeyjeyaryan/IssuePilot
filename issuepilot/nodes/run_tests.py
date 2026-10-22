@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Dict
 
-from issuepilot.events import TEST_REPORT, emit
+from issuepilot.events import STEP_START, TEST_REPORT, emit
 from issuepilot.sandbox import SandboxRunner, collect_failures, summarize_pytest
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 def run_tests_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Execute the tests of the working copy inside the sandbox."""
     logger.info("node=run_tests attempt=%s", state.get("attempts", 0))
+    emit(STEP_START, step="run_tests")
     emit("log", message="Running the tests in the sandbox")
 
     try:

@@ -12,7 +12,7 @@ import shutil
 from pathlib import Path
 from typing import Any, Dict
 
-from issuepilot.events import emit
+from issuepilot.events import STEP_START, emit
 from issuepilot.github_ops import GitHubError, GitHubOps
 from issuepilot.patch import ensure_git_repo
 
@@ -36,6 +36,7 @@ def _copy_demo_repo(source: Path, destination: Path) -> Path:
 def prepare_repo_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """Clone (or copy) the repository the agent has to work on."""
     logger.info("node=prepare_repo demo=%s", state.get("demo_mode"))
+    emit(STEP_START, step="prepare_repo")
     emit("log", message="Preparing the repository checkout")
 
     run_dir = Path(state["run_dir"])

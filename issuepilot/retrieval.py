@@ -26,6 +26,8 @@ import hashlib
 import logging
 import math
 import re
+import threading
+import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
@@ -319,15 +321,25 @@ class HashingEmbedder:
 # Vector stores
 # ---------------------------------------------------------------------------
 class BaseVectorStore:
-    """Common interface for the vector stores used by IssuePilot."""
+    """Common interface for the vector stores used by IssuePilot.
+
+    Every store keeps the *index id* of the last indexing operation so that
+    concurrent runs (the API can run several agents at the same time) never
+    see each other's chunks.
+    """
 
     name = "base"
 
-    def add(self, chunks: Sequence[Chunk], embeddings: Sequence[Sequence[float]]) -> None:
+    def add(
+        self,
+        chunks: Sequence[Chunk],
+        embeddings: Sequence[Sequence[float]],
+        index_id: str = "",
+    ) -> None:
         """Store chunks and their embeddings."""
         raise NotImplementedError
 
-    def query(self, embedding: Sequence[float], k: int) -> List[Tuple[int, float]]:
+    def query(self, embedding: Sequence[float], k: int, index_id: str = "") -> List[Tuple[int, float]]:
         """Return ``(chunk_index, score)`` pairs sorted by descending score."""
         raise NotImplementedError
 
@@ -341,11 +353,16 @@ class MemoryVectorStore(BaseVectorStore):
         """Create an empty store."""
         self._vectors: List[List[float]] = []
 
-    def add(self, chunks: Sequence[Chunk], embeddings: Sequence[Sequence[float]]) -> None:
+    def add(
+        self,
+        chunks: Sequence[Chunk],
+        embeddings: Sequence[Sequence[float]],
+        index_id: str = "",
+    ) -> None:
         """Store chunks and their embeddings."""
         self._vectors = [list(vec) for vec in embeddings]
 
-    def query(self, embedding: Sequence[float], k: int) -> List[Tuple[int, float]]:
+    def query(self, embedding: Sequence[float], k: int, index_id: str = "") -> List[Tuple[int, float]]:
         """Return the ``k`` most similar chunks."""
         scores: List[Tuple[int, float]] = []
         query = list(embedding)
@@ -359,62 +376,99 @@ class MemoryVectorStore(BaseVectorStore):
 
 
 class ChromaVectorStore(BaseVectorStore):
-    """Persistent ChromaDB store."""
+    """Persistent ChromaDB store.
+
+    ChromaDB's Rust backend is not safe to use from several threads at once,
+    so every access is serialised behind a process wide lock.
+    """
 
     name = "chroma"
 
+    #: ChromaDB's Rust backend cannot be instantiated twice for the same
+    #: directory inside one process, so the client is cached globally.
+    _clients: Dict[str, object] = {}
+    _lock = threading.RLock()
+
     def __init__(self, path: str, collection_name: str = "issuepilot_code"):
         """Open (or create) the persistent collection."""
-        import chromadb
         from chromadb.config import Settings as ChromaSettings
 
         self.collection_name = collection_name
-        self._client = chromadb.PersistentClient(
-            path=path,
-            settings=ChromaSettings(anonymized_telemetry=False, allow_reset=True),
-        )
-        self._collection = self._client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
+        self._client = self._get_client(path, ChromaSettings)
+        with self._lock:
+            self._collection = self._client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
 
-    def reset(self) -> None:
-        """Drop everything currently stored."""
-        try:
-            self._client.delete_collection(self.collection_name)
-        except Exception:
-            pass
-        self._collection = self._client.get_or_create_collection(
-            name=self.collection_name, metadata={"hnsw:space": "cosine"}
-        )
+    @classmethod
+    def _get_client(cls, path: str, chroma_settings) -> object:
+        """Return the (cached) Chroma client for ``path``."""
+        import chromadb
 
-    def add(self, chunks: Sequence[Chunk], embeddings: Sequence[Sequence[float]]) -> None:
+        key = str(Path(path).expanduser().resolve())
+        with cls._lock:
+            client = cls._clients.get(key)
+            if client is None:
+                client = chromadb.PersistentClient(
+                    path=key,
+                    settings=chroma_settings(anonymized_telemetry=False, allow_reset=True),
+                )
+                cls._clients[key] = client
+            return client
+
+    def add(
+        self,
+        chunks: Sequence[Chunk],
+        embeddings: Sequence[Sequence[float]],
+        index_id: str = "",
+    ) -> None:
         """Store chunks and their embeddings."""
         if not chunks:
             return
-        self._collection.add(
-            ids=[f"chunk-{i}" for i in range(len(chunks))],
-            embeddings=[list(vec) for vec in embeddings],
-            documents=[chunk.content for chunk in chunks],
-            metadatas=[chunk.to_metadata() for chunk in chunks],
-        )
+        metadatas = []
+        for chunk in chunks:
+            metadata = chunk.to_metadata()
+            metadata["index_id"] = index_id
+            metadatas.append(metadata)
+        with self._lock:
+            self._collection.add(
+                ids=[f"{index_id}-{i}" for i in range(len(chunks))],
+                embeddings=[list(vec) for vec in embeddings],
+                documents=[chunk.content for chunk in chunks],
+                metadatas=metadatas,
+            )
 
-    def query(self, embedding: Sequence[float], k: int) -> List[Tuple[int, float]]:
-        """Return the ``k`` most similar chunks."""
-        count = self._collection.count()
-        if count == 0:
-            return []
-        result = self._collection.query(
-            query_embeddings=[list(embedding)],
-            n_results=min(k, count),
-            include=["distances"],
-        )
+    def query(self, embedding: Sequence[float], k: int, index_id: str = "") -> List[Tuple[int, float]]:
+        """Return the ``k`` most similar chunks of the given index."""
+        with self._lock:
+            where = {"index_id": index_id} if index_id else None
+            count = self._collection.count()
+            if count == 0:
+                return []
+            try:
+                result = self._collection.query(
+                    query_embeddings=[list(embedding)],
+                    n_results=min(k, count),
+                    where=where,
+                    include=["distances"],
+                )
+            except Exception:
+                if where is None:
+                    raise
+                # The index id is unknown to this collection (fresh store).
+                result = self._collection.query(
+                    query_embeddings=[list(embedding)],
+                    n_results=min(k, count),
+                    include=["distances"],
+                )
         ids = (result.get("ids") or [[]])[0]
         distances = (result.get("distances") or [[]])[0]
         out: List[Tuple[int, float]] = []
         for identifier, distance in zip(ids, distances):
+            parts = str(identifier).split("-")
             try:
-                index = int(str(identifier).rsplit("-", 1)[-1])
+                index = int(parts[-1])
             except ValueError:
                 continue
             out.append((index, 1.0 - float(distance)))
@@ -439,46 +493,64 @@ class FaissVectorStore(BaseVectorStore):
         self._index = None
         self._metadata: List[Dict[str, object]] = []
         self._dim = 0
+        self._lock = threading.RLock()
 
     def reset(self) -> None:
         """Drop the index and its metadata."""
-        self._index = None
-        self._metadata = []
-        if self.meta_path.exists():
-            self.meta_path.unlink()
+        with self._lock:
+            self._index = None
+            self._metadata = []
+            if self.meta_path.exists():
+                self.meta_path.unlink()
 
-    def add(self, chunks: Sequence[Chunk], embeddings: Sequence[Sequence[float]]) -> None:
+    def add(
+        self,
+        chunks: Sequence[Chunk],
+        embeddings: Sequence[Sequence[float]],
+        index_id: str = "",
+    ) -> None:
         """Store chunks and their embeddings."""
         import json
 
         if not chunks:
             return
-        matrix = self._np.asarray([list(vec) for vec in embeddings], dtype="float32")
-        self._dim = matrix.shape[1]
-        index = self._faiss.IndexFlatIP(self._dim)
-        index.add(matrix)
-        self._index = index
-        self._metadata = [chunk.to_metadata() for chunk in chunks]
-        self._faiss.write_index(index, str(self.path))
-        self.meta_path.write_text(json.dumps(self._metadata, indent=2), encoding="utf-8")
+        with self._lock:
+            matrix = self._np.asarray([list(vec) for vec in embeddings], dtype="float32")
+            self._dim = matrix.shape[1]
+            index = self._faiss.IndexFlatIP(self._dim)
+            index.add(matrix)
+            self._index = index
+            self._metadata = [
+                {**chunk.to_metadata(), "index_id": index_id, "position": i}
+                for i, chunk in enumerate(chunks)
+            ]
+            self._faiss.write_index(index, str(self.path))
+            self.meta_path.write_text(json.dumps(self._metadata, indent=2), encoding="utf-8")
 
-    def query(self, embedding: Sequence[float], k: int) -> List[Tuple[int, float]]:
-        """Return the ``k`` most similar chunks."""
+    def query(self, embedding: Sequence[float], k: int, index_id: str = "") -> List[Tuple[int, float]]:
+        """Return the ``k`` most similar chunks of the given index."""
         import json
 
-        if self._index is None and self.path.exists():
-            self._index = self._faiss.read_index(str(self.path))
-            if self.meta_path.exists():
-                self._metadata = json.loads(self.meta_path.read_text(encoding="utf-8"))
-        if self._index is None:
-            return []
-        vector = self._np.asarray([list(embedding)], dtype="float32")
-        scores, indices = self._index.search(vector, min(k, self._index.ntotal))
-        out: List[Tuple[int, float]] = []
-        for score, index in zip(scores[0], indices[0]):
-            if index < 0:
-                continue
-            out.append((int(index), float(score)))
+        with self._lock:
+            if self._index is None and self.path.exists():
+                self._index = self._faiss.read_index(str(self.path))
+                if self.meta_path.exists():
+                    self._metadata = json.loads(self.meta_path.read_text(encoding="utf-8"))
+            if self._index is None:
+                return []
+            vector = self._np.asarray([list(embedding)], dtype="float32")
+            total = self._index.ntotal
+            scores, indices = self._index.search(vector, min(total, max(k * 4, k)))
+            out: List[Tuple[int, float]] = []
+            for score, index in zip(scores[0], indices[0]):
+                if index < 0:
+                    continue
+                if index >= len(self._metadata):
+                    continue
+                metadata = self._metadata[index]
+                if index_id and metadata.get("index_id") != index_id:
+                    continue
+                out.append((int(metadata.get("position", index)), float(score)))
         return out
 
 
@@ -493,6 +565,7 @@ class Retriever:
         self.backend_name = backend
         self.embedder = embedder or HashingEmbedder()
         self.chunks: List[Chunk] = []
+        self.index_id: str = ""
         self._store: BaseVectorStore = MemoryVectorStore()
         self._backend_error: Optional[str] = None
         self._init_store()
@@ -520,6 +593,9 @@ class Retriever:
     def index(self, chunks: Sequence[Chunk]) -> int:
         """Index ``chunks`` in the active store.
 
+        The chunks are tagged with a fresh *index id* so that concurrent runs
+        (the API can run several agents at once) never mix up their results.
+
         Args:
             chunks: Chunks to store.
 
@@ -529,15 +605,15 @@ class Retriever:
         self.chunks = list(chunks)
         if not self.chunks:
             return 0
-        reset = getattr(self._store, "reset", None)
-        if callable(reset):
-            try:
-                reset()
-            except Exception as exc:  # pragma: no cover - defensive
-                logger.debug("Could not reset the vector store: %s", exc)
+        self.index_id = uuid.uuid4().hex[:12]
         embeddings = self.embedder.embed_many([chunk.content for chunk in self.chunks])
-        self._store.add(self.chunks, embeddings)
-        logger.info("Indexed %d chunks into the %s store", len(self.chunks), self._store.name)
+        self._store.add(self.chunks, embeddings, self.index_id)
+        logger.info(
+            "Indexed %d chunks into the %s store (index %s)",
+            len(self.chunks),
+            self._store.name,
+            self.index_id,
+        )
         return len(self.chunks)
 
     def query(self, query: str, k: Optional[int] = None) -> List[RetrievedChunk]:
@@ -555,7 +631,7 @@ class Retriever:
         k = k or settings.retrieval_top_k
         embedding = self.embedder.embed(query)
         try:
-            pairs = self._store.query(embedding, k)
+            pairs = self._store.query(embedding, k, self.index_id)
         except Exception as exc:
             logger.warning("The %s store failed to answer the query (%s); using a local scan", self._store.name, exc)
             pairs = self._local_query(embedding, k)

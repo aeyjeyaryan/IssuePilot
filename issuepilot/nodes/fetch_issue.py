@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
-from issuepilot.events import emit
+from issuepilot.events import STEP_START, emit
 from issuepilot.github_ops import GitHubError, IssueInfo
 
 logger = logging.getLogger(__name__)
@@ -14,6 +14,8 @@ logger = logging.getLogger(__name__)
 
 def _load_demo_issue(issue_path: Path) -> IssueInfo:
     """Load an issue description from a local markdown file."""
+    if not issue_path.exists():
+        raise FileNotFoundError(f"The demo issue {issue_path} does not exist")
     text = issue_path.read_text(encoding="utf-8")
     title = issue_path.stem
     body = text
@@ -39,6 +41,7 @@ def fetch_issue_node(state: Dict[str, Any]) -> Dict[str, Any]:
     it is fetched from GitHub.
     """
     logger.info("node=fetch_issue url=%s", state.get("issue_url"))
+    emit(STEP_START, step="fetch_issue")
     emit("log", message=f"Fetching issue {state.get('issue_url')}")
 
     try:

@@ -148,13 +148,10 @@ def build_graph():
     workflow.add_node("finalize", finalize_node)
 
     workflow.set_entry_point("fetch_issue")
-    workflow.add_edge("fetch_issue", "prepare_repo")
-    workflow.add_edge("prepare_repo", "index_codebase")
-    workflow.add_edge("index_codebase", "write_failing_test")
-    workflow.add_edge("write_failing_test", "draft_fix")
-    workflow.add_edge("draft_fix", "apply_patch")
 
-    # Every step can abort the run when it hits an unrecoverable error.
+    # Every step can abort the run when it hits an unrecoverable error, so the
+    # linear steps use a conditional edge instead of a static one.  Mixing the
+    # two would make LangGraph run two nodes in the same superstep.
     for node, following in (
         ("fetch_issue", "prepare_repo"),
         ("prepare_repo", "index_codebase"),
@@ -168,6 +165,7 @@ def build_graph():
             {"continue": following, "finalize": "finalize"},
         )
 
+    workflow.add_edge("draft_fix", "apply_patch")
     workflow.add_conditional_edges(
         "apply_patch",
         route_after_patch,

@@ -6,7 +6,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict
 
-from issuepilot.events import emit
+from issuepilot.events import STEP_START, emit
 from issuepilot.github_ops import GitHubOps
 from issuepilot.patch import (
     create_branch,
@@ -39,6 +39,7 @@ def open_pr_node(state: Dict[str, Any]) -> Dict[str, Any]:
     """
     dry_run = bool(state.get("dry_run"))
     logger.info("node=open_pr dry_run=%s", dry_run)
+    emit(STEP_START, step="open_pr")
     emit("log", message="Preparing the pull request" if not dry_run else "Dry run: skipping the pull request")
 
     repo_path = Path(state["repo_path"])
