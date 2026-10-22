@@ -233,7 +233,7 @@ Everything is configured through environment variables (see `.env.example`).
 | `GITHUB_USER` | – | Login of the user the fork belongs to. |
 | `GITHUB_FORK_REMOTE` | `origin` | Remote used as the base of the fork. |
 | `OLLAMA_BASE_URL` | `http://localhost:11434` | Ollama server. |
-| `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Model used for the fix and the test. |
+| `OLLAMA_MODEL` | `qwen2.5-coder:7b` | Model used for the test, the fix and the root cause. |
 | `OLLAMA_TIMEOUT` | `180` | Seconds before a model call is aborted. |
 | `LLM_TEMPERATURE` | `0.1` | Sampling temperature. |
 | `RETRIEVER_BACKEND` | `chroma` | `chroma`, `faiss` or `memory`. |

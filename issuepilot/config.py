@@ -52,7 +52,7 @@ class Settings:
 
     # --- LLM --------------------------------------------------------------
     ollama_base_url: str = field(default_factory=lambda: os.getenv("OLLAMA_BASE_URL", "http://localhost:11434"))
-    ollama_model: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "gemma3:4b"))
+    ollama_model: str = field(default_factory=lambda: os.getenv("OLLAMA_MODEL", "qwen2.5-coder:7b"))
     ollama_timeout: int = field(default_factory=lambda: _env_int("OLLAMA_TIMEOUT", 180))
     llm_temperature: float = field(default_factory=lambda: float(os.getenv("LLM_TEMPERATURE", "0.1")))
 
