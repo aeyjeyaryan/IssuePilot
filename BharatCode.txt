@@ -1,0 +1,82 @@
+BharatCode submission
+=====================
+
+Project: IssuePilot
+Repo:    https://github.com/aeyjeyaryan/IssuePilot
+
+One line
+--------
+IssuePilot turns a GitHub issue URL into a pull request: it reproduces the
+bug with a real failing test, writes the fix, proves it in a sandbox and
+opens the PR - fully locally, with a local LLM and no cloud services.
+
+Problem
+-------
+Maintainers spend a lot of time on the boring half of open source: reading an
+issue, reproducing it, finding the file, writing a test, opening a PR. Most
+"AI coding" tools stop at suggesting a diff and cannot prove it works.
+IssuePilot closes the loop: the generated test has to fail on the broken code
+and the whole suite has to pass after the fix.
+
+What it does (9 steps)
+----------------------
+1.  fetch_issue          read the issue from GitHub
+2.  prepare_repo         clone the repo, take a git snapshot
+3.  index_codebase       chunk + embed the Python files (Chroma/FAISS/memory)
+4.  write_failing_test   write tests/test_issue_repro.py and RUN it - a test
+                         that passes on the buggy code is rejected
+5.  draft_fix            ask the model for search/replace edits, grounded in
+                         the exact file content and the failure output
+6.  apply_patch          turn the edits into a unified diff and apply it
+7.  run_tests            run the suite in an isolated Docker sandbox
+8.  open_pr              fork -> branch -> commit -> pull request (never the
+                         default branch; --dry-run stops before the push)
+9.  finalize             root cause analysis + report.md
+
+Retries: steps 5-7 loop up to MAX_ATTEMPTS, each attempt from a clean
+snapshot. Every step streams as an event, which the web UI renders live.
+
+Why it is different
+-------------------
+- Proof, not vibes: the reproduction test must fail before the fix and the
+  suite must pass after it.
+- Safe by default: untrusted cloned code never runs on the host. Docker with
+  --network=none, a read-only filesystem, memory/CPU/PID limits and a hard
+  timeout. Without Docker the agent refuses to run the code.
+- Local only: Ollama for the model, ChromaDB/FAISS for retrieval, no API keys.
+- A deterministic offline demo (3 bundled buggy repositories) that always
+  works, plus an honest "limitations" section with measured results.
+- Model friendly patch format: small models cannot write correct unified
+  diffs, so the agent asks for search/replace edits and builds the diff
+  itself, tolerating mis-quoted snippets.
+
+Stack
+-----
+Python 3.12 - LangGraph (state machine) - FastAPI + SSE - Typer + Rich -
+Ollama (gemma3:4b / qwen2.5-coder) - ChromaDB / FAISS - Docker - PyGithub /
+gh - pytest - unidiff.
+
+Try it (60 seconds, no model, no Docker, no network)
+---------------------------------------------------
+    git clone https://github.com/aeyjeyaryan/IssuePilot
+    cd IssuePilot
+    python -m venv .venv && source .venv/bin/activate
+    pip install -r requirements.txt
+    python -m issuepilot.cli demo
+
+    # with a local model
+    ollama serve
+    ollama pull qwen2.5-coder:7b
+    python -m issuepilot.cli demo --backend ollama
+
+    # web UI
+    python -m issuepilot.cli serve      # http://127.0.0.1:8000
+
+Status
+------
+112 tests pass. The offline demo fixes all three bundled repositories.
+With gemma3:4b the pipeline fixes 1 of 3 (the model is the bottleneck for the
+other two - see "Limitations" in the README); a code capable model is the
+recommended configuration.
+
+License: MIT
